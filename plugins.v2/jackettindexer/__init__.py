@@ -22,6 +22,7 @@ from typing import Type
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.config import settings
 from app.core.context import TorrentInfo
 from app.core.event import eventmanager, Event
 from app.helper.sites import SitesHelper
@@ -47,12 +48,12 @@ class JackettIndexer(_PluginBase):
     plugin_name = "Jackett索引器"
     plugin_desc = "集成Jackett索引器搜索，支持Torznab协议多站点搜索。仅索引私有和半公开站点。"
     plugin_icon = "Jackett_A.png"
-    plugin_version = "1.7.0"
+    plugin_version = "1.7.2"
     plugin_author = "Claude"
     author_url = "https://github.com"
     plugin_config_prefix = "jackettindexer_"
     plugin_order = 15
-    auth_level = 2
+    auth_level = 1
 
     # Private attributes
     _enabled: bool = False
@@ -72,6 +73,14 @@ class JackettIndexer(_PluginBase):
     # Domain identifier for indexer (matching reference implementation pattern)
     # Format: plugin_name.author
     JACKETT_DOMAIN = "jackett_indexer.claude"
+
+    def _request_proxies(self) -> Optional[Dict[str, str]]:
+        """
+        根据插件代理开关返回 MoviePilot 兼容的代理配置。
+
+        RequestUtils 的 proxies 参数要求传入代理字典或 None，不能直接传布尔值。
+        """
+        return settings.PROXY if self._proxy else None
 
     # Torznab namespace for XML parsing
     TORZNAB_NS = "http://torznab.com/schemas/2015/feed"
@@ -256,7 +265,7 @@ class JackettIndexer(_PluginBase):
 
             logger.debug(f"【{self.plugin_name}】正在获取索引器列表：{full_url}")
 
-            response = RequestUtils(proxies=self._proxy).get_res(
+            response = RequestUtils(proxies=self._request_proxies()).get_res(
                 url=url,
                 params=params,
                 timeout=30
@@ -355,7 +364,7 @@ class JackettIndexer(_PluginBase):
                 "t": "caps"
             }
 
-            response = RequestUtils(proxies=self._proxy).get_res(
+            response = RequestUtils(proxies=self._request_proxies()).get_res(
                 url=url,
                 params=params,
                 timeout=15
@@ -780,6 +789,7 @@ class JackettIndexer(_PluginBase):
         site: Dict[str, Any],
         keyword: str,
         mtype: Optional[MediaType] = None,
+        cat: Optional[str] = None,
         page: Optional[int] = 0
     ) -> List[TorrentInfo]:
         """
@@ -789,7 +799,13 @@ class JackettIndexer(_PluginBase):
         logger.debug(f"【{self.plugin_name}】async_search_torrents 被调用")
 
         # Delegate to synchronous implementation
-        return self.search_torrents(site, keyword, mtype, page)
+        return self.search_torrents(
+            site=site,
+            keyword=keyword,
+            mtype=mtype,
+            cat=cat,
+            page=page
+        )
 
     def refresh_torrents(
         self,
@@ -869,6 +885,7 @@ class JackettIndexer(_PluginBase):
         site: Dict[str, Any],
         keyword: str,
         mtype: Optional[MediaType] = None,
+        cat: Optional[str] = None,
         page: Optional[int] = 0
     ) -> List[TorrentInfo]:
         """
@@ -880,6 +897,7 @@ class JackettIndexer(_PluginBase):
             site: Site/indexer information dictionary
             keyword: Search keyword
             mtype: Media type (MOVIE or TV)
+            cat: MoviePilot category override
             page: Page number for pagination
 
         Returns:
@@ -954,6 +972,7 @@ class JackettIndexer(_PluginBase):
             search_params = self._build_search_params(
                 keyword=keyword,
                 mtype=mtype,
+                cat=cat,
                 page=page
             )
 
@@ -986,6 +1005,7 @@ class JackettIndexer(_PluginBase):
         self,
         keyword: str,
         mtype: Optional[MediaType] = None,
+        cat: Optional[str] = None,
         page: int = 0
     ) -> Dict[str, Any]:
         """
@@ -994,6 +1014,7 @@ class JackettIndexer(_PluginBase):
         Args:
             keyword: Search keyword or IMDb ID
             mtype: Media type for category filtering
+            cat: MoviePilot category override
             page: Page number
 
         Returns:
@@ -1027,8 +1048,14 @@ class JackettIndexer(_PluginBase):
             params["t"] = "search"
             params["q"] = keyword
 
-        # Add categories as comma-separated string
-        if categories:
+        # Add categories as comma-separated string.
+        # MoviePilot 调用索引器时可能显式传入 cat，优先使用主程序传入的分类。
+        if cat:
+            if isinstance(cat, (list, tuple, set)):
+                params["cat"] = ",".join(map(str, cat))
+            else:
+                params["cat"] = str(cat)
+        elif categories:
             params["cat"] = ",".join(map(str, categories))
 
         return params
@@ -1076,7 +1103,7 @@ class JackettIndexer(_PluginBase):
             logger.debug(f"【{self.plugin_name}】正在搜索 Jackett 索引器 [{indexer_name}]: {full_url}")
             logger.debug(f"【{self.plugin_name}】搜索参数：{params}")
 
-            response = RequestUtils(proxies=self._proxy).get_res(
+            response = RequestUtils(proxies=self._request_proxies()).get_res(
                 url=url,
                 params=params,
                 timeout=60
@@ -1635,7 +1662,7 @@ class JackettIndexer(_PluginBase):
                                             'variant': 'tonal',
                                             'border': 'start',
                                             'title': '配置步骤',
-                                            'text': '① 填写Jackett服务器地址和API密钥 → ② 保存并启用「立即运行一次」同步索引器 → ③ 在「站点管理」中添加站点（使用插件详情页的domain作为站点地址）→ ④ （可选）上一步新增的站点中填入RSS地址'
+                                            'text': '① 填写Jackett服务器地址和API密钥 → ② 保存并启用「立即运行一次」同步索引器 → ③ 在「站点管理」中添加站点（站点地址使用 http://插件详情页domain/ 格式）→ ④ （可选）上一步新增的站点中填入RSS地址'
                                         }
                                     }
                                 ]
@@ -1862,13 +1889,23 @@ class JackettIndexer(_PluginBase):
                     break
 
             if target_indexer:
-                torrents = self.search_torrents(target_indexer, keyword, media_type, page)
+                torrents = self.search_torrents(
+                    site=target_indexer,
+                    keyword=keyword,
+                    mtype=media_type,
+                    page=page
+                )
                 results.extend(torrents)
         else:
             # 搜索所有索引器
             for indexer in self._indexers:
                 try:
-                    torrents = self.search_torrents(indexer, keyword, media_type, page)
+                    torrents = self.search_torrents(
+                        site=indexer,
+                        keyword=keyword,
+                        mtype=media_type,
+                        page=page
+                    )
                     results.extend(torrents)
                 except Exception as e:
                     logger.error(f"【{self.plugin_name}】搜索索引器 {indexer.get('name')} 失败：{str(e)}")

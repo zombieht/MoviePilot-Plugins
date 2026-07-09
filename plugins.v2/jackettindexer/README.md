@@ -93,7 +93,7 @@
 | **服务器地址** | Jackett 服务器地址（必须包含 http:// 或 https://） | `http://192.168.1.100:9117` | ✅ |
 | **API密钥** | 在 Jackett 首页获取的 API 密钥 | `abcdef123456...` | ✅ |
 | **同步周期** | Cron 表达式，设置定时同步频率 | `0 0 */12 * *` (每12小时) | ❌ |
-| **使用代理** | 访问 Jackett 时是否使用系统代理 | ❌ | ❌ |
+| **使用代理** | 访问 Jackett 时是否使用 MoviePilot 系统代理 | ❌ | ❌ |
 | **立即运行一次** | 保存后立即同步索引器列表 | ✅ | ❌ |
 
 3. 点击 **保存**
@@ -113,7 +113,7 @@
 1. 打开 **设置 → 插件 → Jackett索引器**，查看插件详情页
 2. 在索引器列表中，找到每个站点的 **domain**（如 `jackett_indexer.mteamtp`）
 3. 打开 **设置 → 站点管理 → 添加站点**
-4. 将 domain 填入 **站点地址** 字段
+4. 将 `http://domain/` 填入 **站点地址** 字段，例如 `http://jackett_indexer.mteamtp/`
 5. 其他字段可以留空或随意填写（插件会忽略这些字段）
 6. 点击 **保存**
 7. 重复以上步骤，为每个索引器添加站点
@@ -122,7 +122,10 @@
 
 | 插件详情页 | 站点管理 |
 |-----------|---------|
-| 索引器名称：`Jackett索引器-M-Team - TP`<br>站点domain：`jackett_indexer.mteamtp` | 站点地址：`jackett_indexer.mteamtp`<br>站点名称：`Jackett索引器-M-Team - TP`（可选）<br>Cookie/UA：留空 |
+| 索引器名称：`Jackett索引器-M-Team - TP`<br>站点domain：`jackett_indexer.mteamtp` | 站点地址：`http://jackett_indexer.mteamtp/`<br>站点名称：`Jackett索引器-M-Team - TP`（可选）<br>Cookie/UA：留空 |
+
+> [!NOTE]
+> MoviePilot 新增站点时会按 URL 解析站点地址，因此建议带上 `http://` 和结尾 `/`。插件搜索时会自动识别并剥离这个虚拟地址。
 
 > [!TIP]
 > **批量添加技巧**：
