@@ -16,7 +16,7 @@ class Jackett(_PluginBase):
     # 插件图标
     plugin_icon = "Jackett_A.png"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "Codex"
     # 作者主页
@@ -72,7 +72,7 @@ class Jackett(_PluginBase):
 
             SitesHelper().add_indexer(register_domain, self.__build_indexer())
             self.__ensure_search_site_enabled()
-            self._message = f"已注册 Jackett 索引器：{self._site_name}（{self._indexer_id}）"
+            self._message = f"已注册 Jackett 索引器并加入搜索站点范围：{self._site_name}（{self._indexer_id}）"
             logger.info(self._message)
         except Exception as err:
             self._message = f"Jackett 索引器注册失败：{err}"
@@ -318,10 +318,12 @@ class Jackett(_PluginBase):
 
     def __ensure_search_site_enabled(self):
         """
-        如果用户已经限定了搜索站点范围，则把 Jackett 自动加入白名单。
+        把 Jackett 加入搜索站点范围，避免系统配置中没有任何有效站点。
         """
         selected_sites = SystemConfigOper().get(SystemConfigKey.IndexerSites) or []
-        if not selected_sites or self._site_id in selected_sites:
+        if not isinstance(selected_sites, list):
+            selected_sites = []
+        if self._site_id in selected_sites:
             return
         selected_sites.append(self._site_id)
         SystemConfigOper().set(SystemConfigKey.IndexerSites, selected_sites)
@@ -342,6 +344,7 @@ class Jackett(_PluginBase):
             "id": self._site_id,
             "name": self._site_name,
             "domain": self._server_url,
+            "is_active": True,
             "encoding": "UTF-8",
             "public": True,
             "proxy": self._proxy,
