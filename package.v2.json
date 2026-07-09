@@ -947,11 +947,12 @@
     "name": "Jackett索引器",
     "description": "集成Jackett索引器搜索，支持Torznab协议多站点搜索、RSS订阅及Spider浏览。支持索引私有、半公开以及公开站点。",
     "labels": "站点,jackett,search,rss",
-    "version": "1.7.4",
+    "version": "1.7.5",
     "icon": "Jackett_A.png",
     "author": "Claude",
     "level": 1,
     "history": {
+      "v1.7.5": "完美修复未认证状态下的搜索限制，对主程序搜索异常进行捕获并强制由插件接管 Jackett 检索流程",
       "v1.7.4": "实现站点自动维护与直写数据库功能，完美绕过前端「用户未认证」的手动添加限制",
       "v1.7.3": "新增「允许公开站点」配置开关，支持同步并保留 Jackett 的公开站点",
       "v1.7.2": "将插件认证等级调整为1",

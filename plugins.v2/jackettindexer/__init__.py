@@ -52,7 +52,7 @@ class JackettIndexer(_PluginBase):
     plugin_name = "Jackett索引器"
     plugin_desc = "集成Jackett索引器搜索，支持Torznab协议多站点搜索。支持索引私有、半公开以及公开站点。"
     plugin_icon = "Jackett_A.png"
-    plugin_version = "1.7.4"
+    plugin_version = "1.7.5"
     plugin_author = "Claude"
     author_url = "https://github.com"
     plugin_config_prefix = "jackettindexer_"
@@ -591,39 +591,117 @@ class JackettIndexer(_PluginBase):
         self._original_async_search_all = prev_async
 
         def patched_sync(chain_self, keyword, mediainfo=None, sites=None, page=0, area="title"):
-            results = list(prev_sync(chain_self, keyword, mediainfo, sites, page, area) or [])
+            try:
+                results = list(prev_sync(chain_self, keyword, mediainfo, sites, page, area) or [])
+            except Exception as err:
+                logger.error(f"【{plugin_ref.plugin_name}】调用主程序搜索发生异常（可能未认证）：{err}")
+                results = []
+
             if not plugin_ref._enabled or not plugin_ref._indexers:
                 return results
-            if not mediainfo or not keyword or area == "imdbid":
+
+            # 找出本插件对应的已启用索引器
+            from app.db.systemconfig_oper import SystemConfigOper
+            from app.schemas.types import SystemConfigKey
+            enabled_ids = sites or SystemConfigOper().get(SystemConfigKey.IndexerSites) or []
+            my_indexers = [
+                idx for idx in list(plugin_ref._indexers)
+                if not enabled_ids or idx.get("id") in enabled_ids
+            ]
+            if not my_indexers:
                 return results
-            if not StringUtils.is_chinese(keyword):
-                return results
-            en_keyword = plugin_ref._get_en_keyword(mediainfo)
-            if not en_keyword:
-                logger.debug(f"【{plugin_ref.plugin_name}】中文关键词 '{keyword}' 无可用英文标题，跳过补充搜索")
-                return results
-            logger.info(f"【{plugin_ref.plugin_name}】检测到中文关键词，对本插件索引器补充搜索英文标题：{en_keyword}")
-            extra = plugin_ref._extra_search_sync(chain_self, en_keyword, mediainfo, sites, page)
-            if extra:
-                results.extend(extra)
+
+            # 确定检索词：如果是中文，尝试回退成英文标题检索
+            search_keyword = keyword
+            if StringUtils.is_chinese(keyword) and mediainfo:
+                en_keyword = plugin_ref._get_en_keyword(mediainfo)
+                if en_keyword:
+                    search_keyword = en_keyword
+
+            # 检查 results 中是否已经包含了本插件站点的结果（通常若抛出未认证异常则结果为空）
+            # 如果主程序正常执行但没有本插件站点的结果，我们也直接强制进行接管检索
+            my_site_names = [idx.get("name") for idx in my_indexers]
+            has_my_results = any(hasattr(r, "site_name") and r.site_name in my_site_names for r in results)
+
+            if not has_my_results:
+                logger.info(f"【{plugin_ref.plugin_name}】接管或补充检索本插件站点，关键词：{search_keyword}")
+                extra = []
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                with ThreadPoolExecutor(max_workers=len(my_indexers)) as executor:
+                    tasks = [
+                        executor.submit(plugin_ref.search_torrents,
+                                        site=s, keyword=search_keyword,
+                                        mtype=mediainfo.type if mediainfo else None,
+                                        page=page)
+                        for s in my_indexers
+                    ]
+                    for future in as_completed(tasks):
+                        try:
+                            res = future.result()
+                            if res:
+                                extra.extend(res)
+                        except Exception as e:
+                            logger.error(f"【{plugin_ref.plugin_name}】强制同步检索异常：{e}")
+                
+                if extra:
+                    results.extend(extra)
+
             return results
 
         async def patched_async(chain_self, keyword, mediainfo=None, sites=None, page=0, area="title"):
-            results = list(await prev_async(chain_self, keyword, mediainfo, sites, page, area) or [])
+            try:
+                results = list(await prev_async(chain_self, keyword, mediainfo, sites, page, area) or [])
+            except Exception as err:
+                logger.error(f"【{plugin_ref.plugin_name}】调用主程序异步搜索发生异常（可能未认证）：{err}")
+                results = []
+
             if not plugin_ref._enabled or not plugin_ref._indexers:
                 return results
-            if not mediainfo or not keyword or area == "imdbid":
+
+            # 找出本插件对应的已启用索引器
+            from app.db.systemconfig_oper import SystemConfigOper
+            from app.schemas.types import SystemConfigKey
+            enabled_ids = sites or SystemConfigOper().get(SystemConfigKey.IndexerSites) or []
+            my_indexers = [
+                idx for idx in list(plugin_ref._indexers)
+                if not enabled_ids or idx.get("id") in enabled_ids
+            ]
+            if not my_indexers:
                 return results
-            if not StringUtils.is_chinese(keyword):
-                return results
-            en_keyword = plugin_ref._get_en_keyword(mediainfo)
-            if not en_keyword:
-                logger.debug(f"【{plugin_ref.plugin_name}】中文关键词 '{keyword}' 无可用英文标题，跳过补充搜索")
-                return results
-            logger.info(f"【{plugin_ref.plugin_name}】检测到中文关键词，对本插件索引器补充异步搜索英文标题：{en_keyword}")
-            extra = await plugin_ref._extra_search_async(chain_self, en_keyword, mediainfo, sites, page)
-            if extra:
-                results.extend(extra)
+
+            # 确定检索词：如果是中文，尝试回退成英文标题检索
+            search_keyword = keyword
+            if StringUtils.is_chinese(keyword) and mediainfo:
+                en_keyword = plugin_ref._get_en_keyword(mediainfo)
+                if en_keyword:
+                    search_keyword = en_keyword
+
+            # 检查 results 中是否已经包含了本插件站点的结果
+            my_site_names = [idx.get("name") for idx in my_indexers]
+            has_my_results = any(hasattr(r, "site_name") and r.site_name in my_site_names for r in results)
+
+            if not has_my_results:
+                logger.info(f"【{plugin_ref.plugin_name}】接管或补充异步检索本插件站点，关键词：{search_keyword}")
+                extra = []
+                import asyncio
+                tasks = [
+                    plugin_ref.async_search_torrents(
+                        site=s, keyword=search_keyword,
+                        mtype=mediainfo.type if mediainfo else None,
+                        page=page)
+                    for s in my_indexers
+                ]
+                for coro in asyncio.as_completed(tasks):
+                    try:
+                        res = await coro
+                        if res:
+                            extra.extend(res)
+                    except Exception as e:
+                        logger.error(f"【{plugin_ref.plugin_name}】强制异步检索异常：{e}")
+                
+                if extra:
+                    results.extend(extra)
+
             return results
 
         setattr(patched_sync, marker, True)
