@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Tuple
 from urllib.parse import quote, urlparse
 
+from app.db.site_oper import SiteOper
 from app.db.systemconfig_oper import SystemConfigOper
 from app.helper.sites import SitesHelper
 from app.log import logger
@@ -16,7 +17,7 @@ class Jackett(_PluginBase):
     # 插件图标
     plugin_icon = "Jackett_A.png"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件作者
     plugin_author = "Codex"
     # 作者主页
@@ -71,6 +72,7 @@ class Jackett(_PluginBase):
                 raise ValueError("Jackett 服务地址格式不正确")
 
             SitesHelper().add_indexer(register_domain, self.__build_indexer())
+            self.__ensure_site_record(register_domain)
             self.__ensure_search_site_enabled()
             self._message = f"已注册 Jackett 索引器并加入搜索站点范围：{self._site_name}（{self._indexer_id}）"
             logger.info(self._message)
@@ -328,6 +330,31 @@ class Jackett(_PluginBase):
         selected_sites.append(self._site_id)
         SystemConfigOper().set(SystemConfigKey.IndexerSites, selected_sites)
         logger.info(f"已将 {self._site_id} 加入搜索站点范围")
+
+    def __ensure_site_record(self, domain: str):
+        """
+        创建或启用站点管理中的 Jackett 记录，便于前端站点页面展示。
+        """
+        siteoper = SiteOper()
+        site = siteoper.get_by_domain(domain)
+        payload = {
+            "name": self._site_name,
+            "url": self._server_url,
+            "domain": domain,
+            "proxy": 1 if self._proxy else 0,
+            "public": 1,
+            "timeout": self._timeout,
+            "is_active": True,
+        }
+        if site:
+            siteoper.update(site.id, payload)
+            logger.info(f"已更新站点管理记录：{self._site_name}")
+            return
+        state, msg = siteoper.add(**payload)
+        if state:
+            logger.info(f"已新增站点管理记录：{self._site_name}")
+        else:
+            logger.warn(f"新增站点管理记录失败：{msg}")
 
     def __build_indexer(self) -> dict:
         """
