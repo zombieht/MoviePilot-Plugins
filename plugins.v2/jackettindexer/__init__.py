@@ -28,6 +28,10 @@ from app.core.event import eventmanager, Event
 from app.helper.sites import SitesHelper
 from app.log import logger
 from app.plugins import _PluginBase
+try:
+    from app.db.site_oper import SiteOper
+except ImportError:
+    SiteOper = None
 from app.schemas.types import MediaType, EventType
 from app.utils.dom import DomUtils
 from app.utils.http import RequestUtils
@@ -48,7 +52,7 @@ class JackettIndexer(_PluginBase):
     plugin_name = "Jackett索引器"
     plugin_desc = "集成Jackett索引器搜索，支持Torznab协议多站点搜索。支持索引私有、半公开以及公开站点。"
     plugin_icon = "Jackett_A.png"
-    plugin_version = "1.7.3"
+    plugin_version = "1.7.4"
     plugin_author = "Claude"
     author_url = "https://github.com"
     plugin_config_prefix = "jackettindexer_"
@@ -160,6 +164,8 @@ class JackettIndexer(_PluginBase):
             domain = indexer.get("domain", "")
             self._sites_helper.add_indexer(domain, indexer)
             logger.debug(f"【{self.plugin_name}】注册到站点管理：{indexer.get('name')} (domain: {domain})")
+            # 自动维护数据库中的站点管理记录，避免前端“未认证”的手动添加限制
+            self._ensure_site_record(indexer)
 
         logger.info(f"【{self.plugin_name}】插件初始化完成，共注册 {len(self._indexers)} 个索引器")
 
@@ -233,6 +239,8 @@ class JackettIndexer(_PluginBase):
                     self._sites_helper.add_indexer(domain, new_indexer)
                     logger.info(f"【{self.plugin_name}】✅ 成功添加到站点管理：{indexer.get('name')} (domain: {domain})")
                     registered_count += 1
+                # 自动维护数据库中的站点管理记录，避免前端“未认证”的手动添加限制
+                self._ensure_site_record(indexer)
 
             self._last_update = datetime.now()
             logger.info(f"【{self.plugin_name}】索引器同步完成，总计 {len(self._indexers)} 个，新增 {registered_count} 个")
@@ -2229,3 +2237,42 @@ class JackettIndexer(_PluginBase):
         返回工具类列表，每个工具类必须继承自 MoviePilotTool
         """
         return [SearchTorrentsTool, ListIndexersTool]
+
+    def _ensure_site_record(self, indexer: dict):
+        """
+        在数据库中自动创建或更新站点记录，使用户免受前端“用户未认证”的添加限制。
+        """
+        if not SiteOper:
+            return
+        try:
+            domain = indexer.get("domain", "")
+            if not domain:
+                return
+
+            site_oper = SiteOper()
+            site = site_oper.get_by_domain(domain)
+
+            # 使用标准的 URL 格式构造站点地址，如 http://domain/
+            site_url = f"http://{domain}/"
+
+            payload = {
+                "name": indexer.get("name", ""),
+                "url": site_url,
+                "domain": domain,
+                "proxy": 1 if self._proxy else 0,
+                "public": 1 if indexer.get("public", False) else 0,
+                "timeout": 30,
+                "is_active": True,
+            }
+
+            if site:
+                site_oper.update(site.id, payload)
+                logger.debug(f"【{self.plugin_name}】已自动更新站点管理数据库记录：{payload['name']} ({domain})")
+            else:
+                state, msg = site_oper.add(**payload)
+                if state:
+                    logger.info(f"【{self.plugin_name}】已自动新增站点管理数据库记录：{payload['name']} ({domain})")
+                else:
+                    logger.warning(f"【{self.plugin_name}】自动新增站点数据库记录失败：{msg}")
+        except Exception as e:
+            logger.error(f"【{self.plugin_name}】自动同步站点数据库记录时发生异常：{str(e)}")
