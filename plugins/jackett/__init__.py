@@ -1,9 +1,11 @@
 from typing import Any, Dict, List, Tuple
 from urllib.parse import quote, urlparse
 
+from app.db.systemconfig_oper import SystemConfigOper
 from app.helper.sites import SitesHelper
 from app.log import logger
 from app.plugins import _PluginBase
+from app.schemas.types import SystemConfigKey
 
 
 class Jackett(_PluginBase):
@@ -14,7 +16,7 @@ class Jackett(_PluginBase):
     # 插件图标
     plugin_icon = "Jackett_A.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "Codex"
     # 作者主页
@@ -69,6 +71,7 @@ class Jackett(_PluginBase):
                 raise ValueError("Jackett 服务地址格式不正确")
 
             SitesHelper().add_indexer(register_domain, self.__build_indexer())
+            self.__ensure_search_site_enabled()
             self._message = f"已注册 Jackett 索引器：{self._site_name}（{self._indexer_id}）"
             logger.info(self._message)
         except Exception as err:
@@ -312,6 +315,17 @@ class Jackett(_PluginBase):
         退出插件。
         """
         pass
+
+    def __ensure_search_site_enabled(self):
+        """
+        如果用户已经限定了搜索站点范围，则把 Jackett 自动加入白名单。
+        """
+        selected_sites = SystemConfigOper().get(SystemConfigKey.IndexerSites) or []
+        if not selected_sites or self._site_id in selected_sites:
+            return
+        selected_sites.append(self._site_id)
+        SystemConfigOper().set(SystemConfigKey.IndexerSites, selected_sites)
+        logger.info(f"已将 {self._site_id} 加入搜索站点范围")
 
     def __build_indexer(self) -> dict:
         """

@@ -11,6 +11,7 @@
    - `API Key`：Jackett Dashboard 中显示的 API Key
    - `Jackett Indexer ID`：默认 `all`，表示搜索 Jackett 中全部 Indexer；也可以填写具体 Indexer ID。
 4. 保存并启用插件后，MoviePilot 会新增一个名为 `JackettIndexers` 的索引站点。
+5. 如果 MoviePilot 已经限定了搜索站点范围，插件会自动把 `JackettIndexers` 加入搜索站点范围；保存后仍未显示时，请刷新页面或重启 MoviePilot。
 
 ## 注意事项
 
