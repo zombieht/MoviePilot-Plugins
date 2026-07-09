@@ -46,9 +46,9 @@ class JackettIndexer(_PluginBase):
 
     # Plugin metadata
     plugin_name = "Jackett索引器"
-    plugin_desc = "集成Jackett索引器搜索，支持Torznab协议多站点搜索。仅索引私有和半公开站点。"
+    plugin_desc = "集成Jackett索引器搜索，支持Torznab协议多站点搜索。支持索引私有、半公开以及公开站点。"
     plugin_icon = "Jackett_A.png"
-    plugin_version = "1.7.2"
+    plugin_version = "1.7.3"
     plugin_author = "Claude"
     author_url = "https://github.com"
     plugin_config_prefix = "jackettindexer_"
@@ -62,6 +62,7 @@ class JackettIndexer(_PluginBase):
     _proxy: bool = False
     _cron: str = "0 0 */12 * *"  # Sync indexers every 12 hours
     _onlyonce: bool = False
+    _allow_public: bool = False  # 是否允许公开站点
     _indexers: List[Dict[str, Any]] = []
     _scheduler: Optional[BackgroundScheduler] = None
     _sites_helper: Optional[SitesHelper] = None
@@ -106,6 +107,7 @@ class JackettIndexer(_PluginBase):
             self._proxy = config.get("proxy", False)
             self._cron = config.get("cron", "0 0 */12 * *")
             self._onlyonce = config.get("onlyonce", False)
+            self._allow_public = config.get("allow_public", False)
 
         # Validate configuration
         if not self._enabled:
@@ -186,7 +188,7 @@ class JackettIndexer(_PluginBase):
                     indexer_dict, is_xxx_only = self._build_indexer_dict(indexer_data)
 
                     # 过滤掉公开站点，保留私有和半公开站点
-                    if indexer_dict.get("public", False):
+                    if indexer_dict.get("public", False) and not self._allow_public:
                         logger.info(f"【{self.plugin_name}】过滤公开站点：{indexer_dict.get('name', 'Unknown')}")
                         filtered_count += 1
                         continue
@@ -1617,7 +1619,7 @@ class JackettIndexer(_PluginBase):
                         'content': [
                             {
                                 'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
+                                'props': {'cols': 12, 'md': 4},
                                 'content': [
                                     {
                                         'component': 'VTextField',
@@ -1633,7 +1635,7 @@ class JackettIndexer(_PluginBase):
                             },
                             {
                                 'component': 'VCol',
-                                'props': {'cols': 12, 'md': 6},
+                                'props': {'cols': 12, 'md': 4},
                                 'content': [
                                     {
                                         'component': 'VSwitch',
@@ -1641,6 +1643,21 @@ class JackettIndexer(_PluginBase):
                                             'model': 'proxy',
                                             'label': '使用代理',
                                             'hint': '访问Jackett时使用系统代理',
+                                            'persistent-hint': True
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'md': 4},
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'allow_public',
+                                            'label': '允许公开站点',
+                                            'hint': '是否同步并保留Jackett的公开（public）站点',
                                             'persistent-hint': True
                                         }
                                     }
@@ -1718,7 +1735,8 @@ class JackettIndexer(_PluginBase):
             "api_key": "",
             "proxy": False,
             "cron": "0 0 */12 * *",
-            "onlyonce": False
+            "onlyonce": False,
+            "allow_public": False
         }
 
     def get_page(self) -> List[dict]:
@@ -2167,9 +2185,10 @@ class JackettIndexer(_PluginBase):
                               if idx.get("privacy", "").lower() not in ["public", "semi-public"])
             semi_private_count = sum(1 for idx in self._indexers
                                     if idx.get("privacy", "").lower() == "semi-public")
+            public_count = total - private_count - semi_private_count
 
             # 构建站点列表
-            sites_text = f"共 {total} 个索引器（私有:{private_count} | 半私有:{semi_private_count}）\n\n"
+            sites_text = f"共 {total} 个索引器（私有:{private_count} | 半私有:{semi_private_count} | 公开:{public_count}）\n\n"
 
             for idx, indexer in enumerate(self._indexers, 1):
                 # 隐私类型标识

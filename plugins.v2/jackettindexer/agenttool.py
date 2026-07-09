@@ -178,11 +178,12 @@ class ListIndexersTool(MoviePilotTool):
                               if idx.get("privacy", "").lower() not in ["public", "semi-public"])
             semi_private_count = sum(1 for idx in indexers
                                     if idx.get("privacy", "").lower() == "semi-public")
+            public_count = total - private_count - semi_private_count
 
             # 构建列表
             result_lines = [
                 f"📋 **Jackett索引器列表**",
-                f"共 {total} 个索引器（私有:{private_count} | 半私有:{semi_private_count}）\n"
+                f"共 {total} 个索引器（私有:{private_count} | 半私有:{semi_private_count} | 公开:{public_count}）\n"
             ]
 
             for idx, indexer in enumerate(indexers, 1):
