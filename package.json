@@ -1125,5 +1125,18 @@
       "0.1.34": "打通统一智能入口、原生 Agent Tool、会话状态/清理、115 扫码登录、待处理任务恢复与 115 独立直转执行层。",
       "0.1.9": "首版接入夸克/115 转存、影巢搜索/解锁、盘搜/直链路由、候选分页详情、账号配额、签到兜底和健康检查。"
     }
+  },
+  "Jackett": {
+    "name": "Jackett索引器",
+    "description": "将 Jackett Torznab 接口注册为 MoviePilot 搜索索引站点。",
+    "labels": "站点,索引器,Jackett",
+    "version": "1.0",
+    "icon": "Jackett_A.png",
+    "author": "Codex",
+    "level": 1,
+    "v2": true,
+    "history": {
+      "v1.0": "初始版本，支持通过 Jackett Torznab 接口注册 MoviePilot 搜索索引站点。"
+    }
   }
 }

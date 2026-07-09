@@ -927,5 +927,17 @@
     "history": {
       "v1.1.2": "WxPusher 消息通知，支持极简推送 SPT（可多个）与标准推送 AppToken"
     }
+  },
+  "Jackett": {
+    "name": "Jackett索引器",
+    "description": "将 Jackett Torznab 接口注册为 MoviePilot 搜索索引站点。",
+    "labels": "站点,索引器,Jackett",
+    "version": "1.0",
+    "icon": "Jackett_A.png",
+    "author": "Codex",
+    "level": 1,
+    "history": {
+      "v1.0": "初始版本，支持通过 Jackett Torznab 接口注册 MoviePilot 搜索索引站点。"
+    }
   }
 }
